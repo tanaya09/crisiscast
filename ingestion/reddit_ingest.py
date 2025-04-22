@@ -1,7 +1,9 @@
 import os
-# import time
+import time
 import praw
 from dotenv import load_dotenv
+import json
+from kafka import KafkaProducer
 
 # Load secrets
 load_dotenv("config/.env")
@@ -21,39 +23,33 @@ try:
     print("✅ Logged in as:", reddit.user.me())
 except Exception as e:
     print("❌ Login failed:", e)
+    
+producer = KafkaProducer(
+    bootstrap_servers = 'localhost:9092',
+    value_serializer = lambda v: json.dumps(v).encode('utf-8')
+)
 
 
 def main():
     print("🚀 Connected to Reddit API. Listening to subreddit...")
     # subreddit = reddit.subreddit("worldnews")
     subreddit = reddit.subreddit("news+worldnews+technology")
-
+    # for submission in subreddit.stream.submissions(skip_existing=True):
     for submission in subreddit.stream.submissions():
-        print(f"\n📌 {submission.title}")
-        # post = {
-        #     "id": submission.id, # Unique Reddit post ID
-        #     "title": submission.title, # Post title
-        #     "selftext": submission.selftext, # Text body (if any)
-        #     "created_utc": submission.created_utc, # Unix timestamp of creation
-        #     "author": str(submission.author), # Author's username
-        #     "url": submission.url, # URL to content (or post itself)
-        #     "subreddit": str(submission.subreddit), # Subreddit name
-        # }
         post = {
-        "id": submission.id,
-        # "title": submission.title,
-        # "selftext": submission.selftext,
-        "created_utc": submission.created_utc,
-        # "author": str(submission.author),
-        # "url": submission.url,
-        "subreddit": str(submission.subreddit),
-        "score": submission.score,
-        "num_comments": submission.num_comments,
-        # "flair": submission.link_flair_text,
-        # "permalink": submission.permalink,
-        "over_18": submission.over_18
+            "id": submission.id,
+            "title": submission.title,
+            "selftext": submission.selftext,
+            "created_utc": submission.created_utc,
+            "author": str(submission.author),
+            "url": submission.url,
+            "subreddit": str(submission.subreddit),
         }
+        print(f"\n📌 {post['title']}")
         print(post)
+        
+        # Send to Kafka
+        producer.send("reddit_posts", post)
 
 if __name__ == "__main__":
     main()
