@@ -4,7 +4,7 @@ import json
 # Set up Kafka consumer
 consumer = KafkaConsumer(
     'reddit_posts',
-    bootstrap_servers='localhost:9092',
+    bootstrap_servers=['localhost:9095', 'localhost:9096', 'localhost:9097'],
     auto_offset_reset='latest',  # Start at the end of the topic
     enable_auto_commit=True,
     group_id='reddit-consumer-group',
