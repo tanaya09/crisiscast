@@ -14,6 +14,12 @@ PASSWORD      = os.getenv("BLUESKY_PASSWORD")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 30))
 
 def at_uri_to_url(at_uri: str) -> str:
+    """
+    Convert an AT-URI like:
+      at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3k4duaz5vfs2b
+    into a web link:
+      https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur/post/3k4duaz5vfs2b
+    """
     path = at_uri.replace("at://", "")
     authority, _, rkey = path.split("/", 2)
     return f"https://bsky.app/profile/{authority}/post/{rkey}"
@@ -22,6 +28,7 @@ def stream_whats_hot():
     client = Client()
     client.login(HANDLE, PASSWORD)
 
+    # set up Kafka producer
     producer = KafkaProducer(
         bootstrap_servers='localhost:9092',
         value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -41,30 +48,39 @@ def stream_whats_hot():
         if cursor:
             params["cursor"] = cursor
 
-        # resilience to 503 and 400 errors
+        # resilience to 400, 500, 503, and any other errors
         backoff = 1
         resp = None
         while True:
             try:
                 resp = client.app.bsky.feed.get_feed(params)
                 break
-            except BadRequestError as e:
-                # 400 InvalidRequest: likely a bad cursor—reset & skip
-                print("⚠️ 400 InvalidRequest from Bluesky, resetting cursor and skipping this round.")
+            except BadRequestError:
+                # 400 InvalidRequest: bad cursor—reset & skip this round
+                print("⚠️ 400 InvalidRequest from Bluesky; resetting cursor and skipping this round.")
                 cursor = None
                 break
             except RequestException as e:
-                # catch other API errors
                 code = e.response.status_code if e.response else None
-                if getattr(e, "error", None) == "NotEnoughResources" or code == 503:
-                    print(f"⚠️ 503 from Bluesky, backing off {backoff}s…")
+                # retry on server errors
+                if code in (500, 503) or getattr(e, "error", "") == "NotEnoughResources":
+                    print(f"⚠️ {code or 'ServerError'} from Bluesky; backing off {backoff}s…")
                     time.sleep(backoff)
                     backoff = min(backoff * 2, 60)
                     continue
-                # re-raise everything else
-                raise
+                # unknown request error: log and retry
+                print(f"⚠️ RequestException: {e}; retrying in {backoff}s…")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+                continue
+            except Exception as e:
+                # any other error
+                print(f"⚠️ Unexpected error: {e}; retrying in {backoff}s…")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+                continue
 
-        # if we never got a resp (due to 400), skip processing
+        # if we never got a response (due to BadRequestError), skip processing
         if resp is None:
             time.sleep(POLL_INTERVAL)
             continue
@@ -73,31 +89,36 @@ def stream_whats_hot():
         cursor = resp.cursor
 
         for item in posts:
-            if item.feed_context not in allowed_topics:
-                continue
-            if not item.post.record.text or not item.post.record.text.strip():
-                continue
+            try:
+                if item.feed_context not in allowed_topics:
+                    continue
+                text = item.post.record.text or ""
+                if not text.strip():
+                    continue
 
-            uri = item.post.uri
-            if uri in seen_uris:
-                continue
-            seen_uris.add(uri)
+                uri = item.post.uri
+                if uri in seen_uris:
+                    continue
+                seen_uris.add(uri)
 
-            post = item.post
-            data = {
-                "id":        post.cid,
-                "title":     post.record.text,
-                "timestamp": parser.isoparse(post.indexed_at)
-                                        .astimezone(timezone.utc)
-                                        .isoformat(),
-                "author":    post.author.handle,
-                "url":       at_uri_to_url(post.uri),
-                "source":    "Bluesky: What's Hot",
-            }
+                post = item.post
+                data = {
+                    "id":        post.cid,
+                    "title":     text,
+                    "timestamp": parser.isoparse(post.indexed_at)
+                                            .astimezone(timezone.utc)
+                                            .isoformat(),
+                    "author":    post.author.handle,
+                    "url":       at_uri_to_url(post.uri),
+                    "source":    "Bluesky: What's Hot",
+                }
 
-            print(f"\n📌 {data['title']}")
-            print(data)
-            producer.send("bluesky_posts", data)
+                print(f"\n📌 {data['title']}")
+                print(data)
+
+                producer.send("bluesky_posts", data)
+            except Exception as e:
+                print(f"⚠️ Error processing item {getattr(item.post, 'cid', '<unknown>')}: {e}; skipping.")
 
         time.sleep(POLL_INTERVAL)
 
@@ -106,3 +127,8 @@ if __name__ == "__main__":
         stream_whats_hot()
     except KeyboardInterrupt:
         print("\n🛑 Stream stopped by user")
+    except Exception as e:
+        # catch anything unexpected at top level and keep running
+        print(f"⚠️ Fatal error in main loop: {e}; restarting stream…")
+        time.sleep(5)
+        stream_whats_hot()

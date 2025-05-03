@@ -3,10 +3,12 @@ import time
 import json
 import requests
 import feedparser
+import certifi
 from kafka import KafkaProducer
-from dateutil import parser
+from dateutil import parser as date_parser
 from datetime import timezone
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 
 load_dotenv("config/.env")
 RSS_URL       = os.getenv("NEWS_RSS_URL")
@@ -15,7 +17,7 @@ POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 60))
 def stream_news():
     seen = set()
 
-    # set up Kafka producer exactly like the Bluesky script
+    # set up Kafka producer
     producer = KafkaProducer(
         bootstrap_servers='localhost:9092',
         value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -23,11 +25,24 @@ def stream_news():
 
     print("🚀 Streaming RSS from", RSS_URL)
     while True:
-        # fetch & parse
-        feed = feedparser.parse(RSS_URL)
-        if feed.bozo:
-            resp = requests.get(RSS_URL)
-            feed = feedparser.parse(resp.text)
+        # --- fetch+parse via requests+certifi with back-off ---
+        backoff = 1
+        while True:
+            try:
+                resp = requests.get(RSS_URL,
+                                    timeout=10,
+                                    verify=certifi.where())
+                resp.raise_for_status()
+                feed = feedparser.parse(resp.text)
+                if feed.bozo:
+                    # parsing-level error
+                    raise feed.bozo_exception or Exception("feedparser bozo error")
+                break
+            except Exception as e:
+                print(f"⚠️ Fetch/parse error: {e}; retrying in {backoff}s…")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+        # --- end resilient fetch ---
 
         for e in feed.entries:
             uid = e.get("id") or e.link
@@ -38,15 +53,14 @@ def stream_news():
             # parse published timestamp into UTC ISO
             published_str = e.get("published") or e.get("updated") or ""
             try:
-                dt = parser.parse(published_str)
+                dt = date_parser.parse(published_str)
                 timestamp = dt.astimezone(timezone.utc).isoformat()
             except Exception:
                 timestamp = None
 
             # pull publisher from <source> if author is missing
-            publisher = None
-            if hasattr(e, "source") and e.source:
-                publisher = e.source.title
+            publisher = getattr(e, "source", None)
+            publisher = publisher.title if publisher else None
 
             data = {
                 "id":        uid,
@@ -57,11 +71,9 @@ def stream_news():
                 "source":    "Google News RSS",
             }
 
-            # print for debugging
             print(f"\n📌 {data['title']}")
             print(data)
 
-            # send to Kafka on the 'google_news_posts' topic
             producer.send("google_news_posts", data)
 
         time.sleep(POLL_INTERVAL)
