@@ -50,13 +50,13 @@ def update_feed(n):
         print("↻  fetched", len(raw), "docs; newest timestamp:", raw[0].get("timestamp"))
     else:
         print("↻  fetched 0 docs")
-    # 2) Deduplicate by `id`, keep first occurrence
-    seen = set()
+    # 2) Deduplicate by *title* (normalized), keep first 10 unique titles
+    seen_titles = set()
     unique = []
     for doc in raw:
-        pid = doc.get("id")
-        if pid and pid not in seen:
-            seen.add(pid)
+        title = doc.get("title", "").strip().lower()
+        if title and title not in seen_titles:
+            seen_titles.add(title)
             unique.append(doc)
         if len(unique) >= 10:
             break
@@ -99,17 +99,17 @@ def run_search(q):
     # 2) Fetch top N raw hits from Qdrant
     raw_hits = qdrant.search(collection_name=QCOL, query_vector=vec, limit=20)
 
-    # 3) Deduplicate by 'id' (fallback to title if missing)
-    seen_ids = set()
+    # 3) Deduplicate by *title* (normalized), keep first 5 unique titles
+    seen_titles = set()
     unique_hits = []
     for hit in raw_hits:
-        pid = hit.payload.get("id") or hit.payload.get("title")
-        if pid in seen_ids:
+        title = hit.payload.get("title", "").strip().lower()
+        if not title or title in seen_titles:
             continue
-        seen_ids.add(pid)
+        seen_titles.add(title)
         unique_hits.append(hit)
         if len(unique_hits) >= 5:
-            break 
+            break
 
     # 4) Build Dash cards from unique_hits
     results = []
