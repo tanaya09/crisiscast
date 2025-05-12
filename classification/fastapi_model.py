@@ -21,7 +21,7 @@ crisis_labels = [
     "financial_crisis", "civil_unrest", "infrastructure_failure", "environmental_crisis", "crime", "none"
 ]
 
-# Prompt C format
+# Prompt format
 def format_prompt(text: str) -> str:
     return (
         "Many texts are not about crises. If the text is unrelated to any crisis, respond with: none.\n\n"

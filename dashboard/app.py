@@ -127,8 +127,6 @@ def draw_initial_time_series():
         if len(total_by_time) > 10:  # Only resample if we have enough data
             # Convert to pandas datetime index for resampling
             total_by_time.set_index('date', inplace=True)
-            # Resample to 30-minute intervals and take the sum
-            # Using 'min' instead of 'T' which is deprecated
             resampled = total_by_time.resample('30min').sum().reset_index()
             
             # Add trace for total count - area chart for better trend visualization
@@ -138,11 +136,11 @@ def draw_initial_time_series():
                 mode='lines',
                 name='Total Crisis Reports',
                 line=dict(color='#FF4136', width=3, shape='spline', smoothing=1.3),  # Smooth curved line
-                fill='tozeroy',  # Fill area below line
+                fill='tozeroy',  
                 fillcolor='rgba(255, 65, 54, 0.3)'  # Transparent red
             ))
         else:
-            # If we don't have enough data, use the original data
+            
             total_by_time = total_by_time.sort_values('date')
             fig.add_trace(go.Scatter(
                 x=total_by_time['date'],
@@ -160,7 +158,7 @@ def draw_initial_time_series():
         xaxis_title="Time",
         yaxis_title="Number of Reports",
         hovermode="x unified",
-        showlegend=False,  # No need for legend with just one line
+        showlegend=False, 
         height=400,  # Reduced height
         margin=dict(l=50, r=50, t=50, b=50),
         plot_bgcolor='white',  # White background
@@ -194,7 +192,7 @@ def draw_crisis_distribution_bar():
     from_date = datetime.now(timezone.utc) - timedelta(hours=6)
     to_date = datetime.now(timezone.utc)
     
-    # Convert to ISO format for MongoDB query
+    # Converting to ISO format for MongoDB query
     from_date_iso = from_date.isoformat()
     to_date_iso = to_date.isoformat()
     
@@ -272,7 +270,7 @@ def draw_crisis_heatmap():
         color_continuous_scale="Viridis"
     )
     
-    # Improve readability
+    # Improving readability
     fig.update_layout(
         xaxis=dict(tickangle=45, color='black'),
         yaxis=dict(autorange="reversed", color='black'),  # To show most important crises at top
