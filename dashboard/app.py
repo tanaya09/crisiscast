@@ -34,7 +34,7 @@ CRISIS_COLORS = {
     "financial_crisis": "info", "infrastructure_failure": "light", "environmental_crisis": "success"
 }
 
-# Helper functions for MongoDB aggregation (to replace MongoStorage methods)
+# Helper functions for MongoDB aggregation
 def get_count_by_type_over_time(from_date=None, to_date=None, unit="minute"):
     """Replacement for mongo.get_count_by_type_over_time method"""
     match_stage = {}
@@ -69,7 +69,7 @@ def get_count_by_type_over_time(from_date=None, to_date=None, unit="minute"):
                 }
             }
         }},
-        # Then format the date to the requested unit granularity
+        # format the date to the requested unit granularity
         {"$project": {
             "crisis_type": 1,
             "date_str": {"$dateToString": {
@@ -124,7 +124,7 @@ def draw_initial_time_series():
         total_by_time = df.groupby('date')['count'].sum().reset_index()
         
         # Create a more aggregated view by resampling to 30-minute intervals
-        if len(total_by_time) > 10:  # Only resample if we have enough data
+        if len(total_by_time) > 10: 
             # Convert to pandas datetime index for resampling
             total_by_time.set_index('date', inplace=True)
             resampled = total_by_time.resample('30min').sum().reset_index()
@@ -159,11 +159,11 @@ def draw_initial_time_series():
         yaxis_title="Number of Reports",
         hovermode="x unified",
         showlegend=False, 
-        height=400,  # Reduced height
+        height=400,  
         margin=dict(l=50, r=50, t=50, b=50),
-        plot_bgcolor='white',  # White background
-        paper_bgcolor='white',  # White background for entire plot
-        font=dict(color='black')  # Black text
+        plot_bgcolor='white',  
+        paper_bgcolor='white', 
+        font=dict(color='black')  
     )
     
     # Improve the grid and axes
@@ -173,7 +173,7 @@ def draw_initial_time_series():
         gridcolor='rgba(211, 211, 211, 0.5)',
         zeroline=False,
         tickangle=0,
-        tickformat='%H:%M\n%b %d',  # More readable time format
+        tickformat='%H:%M\n%b %d',
         color='black'  # Black axis labels
     )
     
@@ -259,7 +259,7 @@ def draw_crisis_heatmap():
     # Handle potential duplicates by summing counts for same crisis_type and hour
     df = df.groupby(['crisis_type', 'hour'])['count'].sum().reset_index()
     
-    # Now create the pivot table with the deduplicated data
+    # create the pivot table with the deduplicated data
     pivot = df.pivot(index="crisis_type", columns="hour", values="count").fillna(0)
     
     fig = px.imshow(
@@ -315,13 +315,13 @@ app.layout = dbc.Container([
 
                 dbc.Col([
                     html.H2("📊 Crisis Analytics"),
-                    dcc.Graph(id="crisis-bar-chart", className="mb-4"),  # Added margin-bottom
+                    dcc.Graph(id="crisis-bar-chart", className="mb-4"),  
                     dcc.Interval(id="analytics-interval", interval=20*1000, n_intervals=0),
                     dcc.Graph(id="time-series", figure=draw_initial_time_series(), className="mb-4"),  # Added margin-bottom
                     dcc.Interval(id="time-series-interval", interval=20*1000, n_intervals=0),
-                    dcc.Graph(id="crisis-heatmap", className="mb-4"),  # Added margin-bottom
+                    dcc.Graph(id="crisis-heatmap", className="mb-4"),  
                     dcc.Interval(id="heatmap-interval", interval=20*1000, n_intervals=0),
-                    emergency_contacts()  # Moved emergency contacts here
+                    emergency_contacts() 
                 ], width=6),
             ], className="mt-4"),
         ]),
@@ -407,11 +407,11 @@ def run_search(q):
     return results
 
 @app.callback(
-    Output("time-series", "figure"),  # Changed from extendData to figure for full refresh
+    Output("time-series", "figure"), 
     Input("time-series-interval", "n_intervals")
 )
 def update_time_series(n):
-    # Completely redraw the chart instead of extending it
+
     return draw_initial_time_series()
 
 @app.callback(
