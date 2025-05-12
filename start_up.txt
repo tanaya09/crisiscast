@@ -1,0 +1,7 @@
+uvicorn fastapi_model:app --host 0.0.0.0 --port 8000 --reload
+
+python ingestion/unified_ingest.py
+
+spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2 processing/spark_kafka_consumer.py
+
+python dashboard/app.py

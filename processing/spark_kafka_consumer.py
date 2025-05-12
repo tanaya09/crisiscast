@@ -17,27 +17,10 @@ from requests.adapters import HTTPAdapter, Retry
 
 # 1. Load environment variables
 load_dotenv("config/.env")
-JINA_TOKEN = os.getenv("JINA_API_KEY")
-JINA_API_URL = "https://api.jina.ai/v1/classify"
-JINA_HEADERS = {
-    "Authorization": f"Bearer {JINA_TOKEN}",
-    "Content-Type": "application/json",
-    "Accept": "application/json"
-}
+
 ALLOWED = [
-    "natural disaster",
-    "terrorist attack",
-    "cyber attack",
-    "pandemic",
-    "war",
-    "financial crisis",
-    "civil unrest",
-    "infrastructure failure",
-    "environmental crisis",
-    "crime",
-    "politics",
-    "law",
-    "other"
+    "natural_disaster", "terrorist_attack", "cyberattack", "pandemic", "war",
+    "financial_crisis", "civil_unrest", "infrastructure_failure", "environmental_crisis", "crime", "none"
 ]
 
 # Retry strategy for Jina API
@@ -142,19 +125,20 @@ def write_to_all_outputs(df, epoch_id):
         return
     print(f"Processing batch {epoch_id} with {batch_size} records")
 
-    # Batch classification
     try:
-        inputs = [{"text": r.get("title", "")} for r in records]
-        payload = {"model": "jina-embeddings-v3", "labels": ALLOWED, "input": inputs}
-        resp = session.post(JINA_API_URL, headers=JINA_HEADERS, json=payload, timeout=60)
+        texts = [r.get("title", "") for r in records]
+        payload = {"inputs": texts}
+        resp = session.post("http://localhost:8000/classify_batch", json=payload, timeout=60)
         resp.raise_for_status()
-        results = resp.json().get("data", [])
-        for rec, item in zip(records, results):
-            rec["crisis_type"] = item.get("prediction", "other").lower().strip()
+        predictions = resp.json().get("labels", [])
+
+        for rec, pred in zip(records, predictions):
+            rec["crisis_type"] = pred if pred in ALLOWED else "none"
+
     except Exception as e:
-        print(f"Batch classification error: {e}")
+        print(f"Classification via local FastAPI failed: {e}")
         for rec in records:
-            rec["crisis_type"] = "other"
+            rec["crisis_type"] = "none"
 
     # Bulk insert into MongoDB
     try:
@@ -197,7 +181,7 @@ def write_to_all_outputs(df, epoch_id):
                     payload={
                         "title": rec.get("title", ""),
                         "url": rec.get("url", ""),
-                        "crisis_type": rec.get("crisis_type", "other"),
+                        "crisis_type": rec.get("crisis_type", "none"),
                         "source": rec.get("source", ""),
                         "id": rec.get("id", "")
                     }
