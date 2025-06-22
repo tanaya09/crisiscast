@@ -1,4 +1,5 @@
-# CrisisCast
+# CrisisCast 
+> 🆘 Real-time crisis detection from social signals using scalable big data pipelines and AI.
 
 > **Note:** For a more detailed analysis and screenshots, see the [Project Report](https://drive.google.com/file/d/1zY9Wx9fpCw1JWgF0teYs5nffHP10hglJ/view).
 
