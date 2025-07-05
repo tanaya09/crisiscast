@@ -23,7 +23,6 @@ ALLOWED = [
     "financial_crisis", "civil_unrest", "infrastructure_failure", "environmental_crisis", "crime", "none"
 ]
 
-# Retry strategy for Jina API
 session = requests.Session()
 retry_strategy = Retry(
     total=3,
